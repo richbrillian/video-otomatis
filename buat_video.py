@@ -31,7 +31,7 @@ W, H = 1080, 1920
 DETIK_PER_KLIP = float(os.environ.get("DETIK_PER_KLIP", "6"))   # latar berganti tiap ~6 detik
 MAKS_KLIP = int(os.environ.get("MAKS_KLIP", "8"))
 KATA_KUNCI_CADANGAN = os.environ.get("KATA_KUNCI_CADANGAN", "family home")
-UKURAN_PERTANYAAN = int(os.environ.get("UKURAN_PERTANYAAN", "33"))
+UKURAN_PERTANYAAN = int(os.environ.get("UKURAN_PERTANYAAN", "16"))
 UKURAN_SUBTITLE = int(os.environ.get("UKURAN_SUBTITLE", "33"))
 FONT_REGULAR = os.environ.get("FONT_REGULAR", "fonts/Poppins-Regular.ttf")
 
