@@ -31,8 +31,8 @@ W, H = 1080, 1920
 DETIK_PER_KLIP = float(os.environ.get("DETIK_PER_KLIP", "6"))   # latar berganti tiap ~6 detik
 MAKS_KLIP = int(os.environ.get("MAKS_KLIP", "8"))
 KATA_KUNCI_CADANGAN = os.environ.get("KATA_KUNCI_CADANGAN", "family home")
-UKURAN_PERTANYAAN = int(os.environ.get("UKURAN_PERTANYAAN", "66"))
-UKURAN_SUBTITLE = int(os.environ.get("UKURAN_SUBTITLE", "96"))
+UKURAN_PERTANYAAN = int(os.environ.get("UKURAN_PERTANYAAN", "33"))
+UKURAN_SUBTITLE = int(os.environ.get("UKURAN_SUBTITLE", "33"))
 FONT_REGULAR = os.environ.get("FONT_REGULAR", "fonts/Poppins-Regular.ttf")
 
 # Kolom (0 = A)
@@ -206,7 +206,7 @@ def build_ass(question, words, total, out_ass, font_name):
     # Kelompokkan kata jadi potongan pendek (maks 4 kata / 24 huruf) agar mudah dibaca
     chunks, cur = [], []
     for w in words:
-        if cur and (len(cur) >= 3 or len(" ".join(x[0] for x in cur + [w])) > 18):
+        if cur and (len(cur) >= 5 or len(" ".join(x[0] for x in cur + [w])) > 30):
             chunks.append(cur); cur = []
         cur.append(w)
         if w[0][-1] in ".?!,":
@@ -222,6 +222,10 @@ def build_ass(question, words, total, out_ass, font_name):
         text = " ".join(x[0] for x in c)
         lines.append(f"Dialogue: 1,{ass_time(start)},{ass_time(end)},Sub,,0,0,0,,{ass_escape(text)}")
 
+    # Ukuran font di subtitle (ASS) dihitung beda dengan di gambar; samakan supaya tampil sama besar
+    from PIL import ImageFont
+    asc, desc = ImageFont.truetype(FONT_FILE, 1000).getmetrics()
+    ukuran_ass = round(UKURAN_SUBTITLE * (asc + desc) / 1000)
     header = f"""[Script Info]
 ScriptType: v4.00+
 PlayResX: {W}
@@ -231,7 +235,7 @@ ScaledBorderAndShadow: yes
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Sub,{font_name},{UKURAN_SUBTITLE},&H00FFFFFF,&H00FFFFFF,&H00000000,&H64000000,-1,0,0,0,100,100,0,0,1,8,3,2,70,70,520,1
+Style: Sub,{font_name},{ukuran_ass},&H00FFFFFF,&H00FFFFFF,&H00000000,&H64000000,-1,0,0,0,100,100,0,0,1,{max(2, round(UKURAN_SUBTITLE * 0.09))},1,2,70,70,520,1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
@@ -240,41 +244,88 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         f.write(header + "\n".join(lines) + "\n")
 
 
+NAMA_DEPAN = ["rina", "dewi", "budi", "ayu", "sari", "putri", "andi", "rizky", "fajar", "nisa", "wulan", "dimas",
+              "intan", "yoga", "tika", "eko", "maya", "bayu", "indah", "fitri", "agus", "lina", "reza", "mega"]
+NAMA_BELAKANG = ["ayu", "sari", "pratama", "lestari", "putra", "wijaya", "rahma", "kusuma", "saputra", "dewi",
+                 "anggraini", "permata", "hidayat", "nugraha"]
+TEMA_AVATAR = ["cat", "kitten", "dog", "puppy", "rabbit", "bird", "flower", "rose", "sunflower", "coffee cup",
+               "tea", "cake", "sunset", "mountain", "beach", "forest", "leaf", "bicycle", "book", "plant", "moon"]
+
+
+def nama_acak():
+    """Nama fiktif acak, contoh: 'Rina' atau 'Dimas Pratama'"""
+    depan = random.choice(NAMA_DEPAN).capitalize()
+    if random.random() < 0.5:
+        return depan
+    return f"{depan} {random.choice(NAMA_BELAKANG).capitalize()}"
+
+
+def avatar_acak(ukuran):
+    """Foto profil acak dari Pixabay: hewan/benda/alam (bukan foto orang). Bulat. None kalau gagal."""
+    try:
+        from PIL import Image, ImageDraw, ImageOps
+        import io
+        r = requests.get("https://pixabay.com/api/", params={
+            "key": os.environ["PIXABAY_API_KEY"], "q": random.choice(TEMA_AVATAR), "image_type": "photo",
+            "safesearch": "true", "per_page": 30}, timeout=30)
+        hits = r.json().get("hits", []) if r.status_code == 200 else []
+        if not hits:
+            return None
+        hit = random.choice(hits)
+        foto = requests.get(hit["webformatURL"], timeout=60).content
+        im = ImageOps.fit(Image.open(io.BytesIO(foto)).convert("RGB"), (ukuran, ukuran))
+        mask = Image.new("L", (ukuran, ukuran), 0)
+        ImageDraw.Draw(mask).ellipse([0, 0, ukuran - 1, ukuran - 1], fill=255)
+        im.putalpha(mask)
+        return im
+    except Exception:
+        return None
+
+
 def kartu_komentar(question, out_png):
-    """Gambar kartu putih bergaya 'Membalas komentar' (seperti balasan komentar TikTok/Reels)."""
+    """Gambar kartu putih bergaya 'Membalas komentar' (seperti balasan komentar TikTok/Reels).
+    Semua ukuran mengikuti UKURAN_PERTANYAAN."""
     from PIL import Image, ImageDraw, ImageFont
-    bold = ImageFont.truetype(FONT_FILE, UKURAN_PERTANYAAN)
-    small = ImageFont.truetype(FONT_REGULAR, 36)
-    lebar, pad = 920, 48
-    # bungkus teks sesuai lebar kartu
-    baris, kata = [], question.split()
-    cur = ""
-    for k in kata:
+    u = UKURAN_PERTANYAAN
+    bold = ImageFont.truetype(FONT_FILE, u)
+    small = ImageFont.truetype(FONT_REGULAR, max(14, round(u * 0.62)))
+    ikon = max(36, round(u * 1.7))
+    pad = max(16, round(u * 0.75))
+    maks_lebar = 900
+    # bungkus teks sesuai lebar maksimal kartu
+    baris, cur = [], ""
+    for k in question.split():
         uji = (cur + " " + k).strip()
-        if bold.getlength(uji) <= lebar - 2 * pad:
+        if bold.getlength(uji) <= maks_lebar - 2 * pad:
             cur = uji
         else:
             baris.append(cur); cur = k
     if cur:
         baris.append(cur)
-    tinggi_baris = int(UKURAN_PERTANYAAN * 1.25)
-    tinggi = pad + 56 + 22 + tinggi_baris * len(baris) + pad
+    label = "Balas komentar " + nama_acak()
+    lebar_isi = max([bold.getlength(b) for b in baris] + [ikon + pad * 0.6 + small.getlength(label)])
+    lebar = int(lebar_isi + 2 * pad)
+    tinggi_baris = int(u * 1.3)
+    jarak = round(u * 0.45)
+    tinggi = pad + ikon + jarak + tinggi_baris * len(baris) + pad
     img = Image.new("RGBA", (W, H), (0, 0, 0, 0))
     d = ImageDraw.Draw(img)
-    x0, y0 = (W - lebar) // 2, 250
-    # bayangan
-    d.rounded_rectangle([x0 + 8, y0 + 10, x0 + lebar + 8, y0 + tinggi + 10], 40, fill=(0, 0, 0, 90))
-    # kartu + ekor kecil
-    d.rounded_rectangle([x0, y0, x0 + lebar, y0 + tinggi], 40, fill=(255, 255, 255, 255))
-    d.polygon([(x0 + 70, y0 + tinggi - 2), (x0 + 120, y0 + tinggi - 2), (x0 + 60, y0 + tinggi + 45)],
+    x0, y0 = (W - lebar) // 2, 300
+    r = round(u * 0.8)
+    d.rounded_rectangle([x0 + 5, y0 + 6, x0 + lebar + 5, y0 + tinggi + 6], r, fill=(0, 0, 0, 90))
+    d.rounded_rectangle([x0, y0, x0 + lebar, y0 + tinggi], r, fill=(255, 255, 255, 255))
+    e = round(u * 0.9)
+    d.polygon([(x0 + r, y0 + tinggi - 2), (x0 + r + e, y0 + tinggi - 2), (x0 + r - e // 3, y0 + tinggi + e)],
               fill=(255, 255, 255, 255))
-    # avatar + label
     ay = y0 + pad
-    d.ellipse([x0 + pad, ay, x0 + pad + 56, ay + 56], fill=(252, 163, 17, 255))
-    d.text((x0 + pad + 28, ay + 28), "?", font=ImageFont.truetype(FONT_FILE, 36), fill="white", anchor="mm")
-    d.text((x0 + pad + 76, ay + 28), "Membalas komentar", font=small, fill=(110, 110, 110, 255), anchor="lm")
-    # teks pertanyaan
-    ty = ay + 56 + 22
+    foto = avatar_acak(ikon)
+    if foto is not None:
+        img.alpha_composite(foto, (x0 + pad, ay))
+    else:
+        d.ellipse([x0 + pad, ay, x0 + pad + ikon, ay + ikon], fill=(252, 163, 17, 255))
+    d.text((x0 + pad + ikon + round(pad * 0.5), ay + ikon / 2), label, font=small, fill=(110, 110, 110, 255),
+           anchor="lm")
+    ty = ay + ikon + jarak
     for b in baris:
         d.text((x0 + pad, ty), b, font=bold, fill=(20, 20, 20, 255))
         ty += tinggi_baris
