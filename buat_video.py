@@ -22,7 +22,7 @@ import requests
 SPREADSHEET_ID = os.environ.get("SPREADSHEET_ID", "1y1snWob1-V8IwQakheoBSpYK5c2oqezABHX1rL4IRn8")
 SHEET_NAME = os.environ.get("SHEET_NAME", "Untitled")
 DRIVE_FOLDER_NAME = os.environ.get("DRIVE_FOLDER_NAME", "Video Otomatis GitHub")
-MAX_PER_RUN = int(os.environ.get("MAX_PER_RUN", "1"))
+MAX_PER_RUN = int(os.environ.get("MAX_PER_RUN", "3"))
 VOICE_ID = os.environ.get("VOICE_ID", "XrExE9yKIg1WjnnlVkGX")  # suara 'Matilda' (premade ElevenLabs)
 MODEL_ID = os.environ.get("MODEL_ID", "eleven_multilingual_v2")
 JEDA_DETIK = float(os.environ.get("JEDA_DETIK", "3"))
