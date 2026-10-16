@@ -22,8 +22,8 @@ import requests
 SPREADSHEET_ID = os.environ.get("SPREADSHEET_ID", "1y1snWob1-V8IwQakheoBSpYK5c2oqezABHX1rL4IRn8")
 SHEET_NAME = os.environ.get("SHEET_NAME", "Untitled")
 DRIVE_FOLDER_NAME = os.environ.get("DRIVE_FOLDER_NAME", "Video Otomatis GitHub")
-MAX_PER_RUN = int(os.environ.get("MAX_PER_RUN", "3"))
-VOICE_ID = os.environ.get("VOICE_ID", "XrExE9yKIg1WjnnlVkGX")  # suara 'Matilda' (premade ElevenLabs)
+MAX_PER_RUN = int(os.environ.get("MAX_PER_RUN", "1"))
+VOICE_ID = os.environ.get("VOICE_ID", "gmnazjXOFoOcWA59sd5m")  # suara pilihan dari Voice Library
 MODEL_ID = os.environ.get("MODEL_ID", "eleven_multilingual_v2")
 JEDA_DETIK = float(os.environ.get("JEDA_DETIK", "3"))
 FONT_FILE = os.environ.get("FONT_FILE", "fonts/Poppins-Bold.ttf")
@@ -37,7 +37,8 @@ FONT_REGULAR = os.environ.get("FONT_REGULAR", "fonts/Poppins-Regular.ttf")
 
 # Kolom (0 = A)
 COL_NO, COL_TANYA, COL_JAWAB, COL_STATUS = 0, 1, 2, 4
-COL_LINK, COL_ERROR, COL_WAKTU, COL_KATAKUNCI, COL_SUMBER = 7, 8, 9, 10, 11
+COL_LINK, COL_ERROR, COL_WAKTU, COL_KATAKUNCI, COL_SUMBER, COL_UNDUH = 7, 8, 9, 10, 11, 12
+STATUS_JADI = os.environ.get("STATUS_JADI", "siap posting")  # dibaca Make untuk diposting ke Facebook
 
 
 def cek(r, langkah):
@@ -64,7 +65,7 @@ def google_token():
 
 
 def sheet_get(tok):
-    url = f"https://sheets.googleapis.com/v4/spreadsheets/{SPREADSHEET_ID}/values/{SHEET_NAME}!A1:L2000"
+    url = f"https://sheets.googleapis.com/v4/spreadsheets/{SPREADSHEET_ID}/values/{SHEET_NAME}!A1:N2000"
     r = requests.get(url, headers={"Authorization": f"Bearer {tok}"}, timeout=30)
     cek(r, "Membaca Google Sheet")
     return r.json().get("values", [])
@@ -84,13 +85,13 @@ def drive_folder(tok):
          f"and trashed = false")
     r = requests.get("https://www.googleapis.com/drive/v3/files", params={"q": q, "fields": "files(id)"},
                      headers={"Authorization": f"Bearer {tok}"}, timeout=30)
-    cek(r, "Google Drive / Pixabay")
+    cek(r, "Google Drive")
     files = r.json().get("files", [])
     if files:
         return files[0]["id"]
     r = requests.post("https://www.googleapis.com/drive/v3/files", headers={"Authorization": f"Bearer {tok}"},
                       json={"name": DRIVE_FOLDER_NAME, "mimeType": "application/vnd.google-apps.folder"}, timeout=30)
-    cek(r, "Google Drive / Pixabay")
+    cek(r, "Google Drive")
     return r.json()["id"]
 
 
@@ -104,8 +105,15 @@ def drive_upload(tok, path, name, folder_id):
         r = requests.post(
             "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,webViewLink",
             headers={"Authorization": f"Bearer {tok}"}, files=files, timeout=600)
-    cek(r, "Google Drive / Pixabay")
-    return r.json()["webViewLink"]
+    cek(r, "Upload ke Google Drive")
+    info = r.json()
+    # Buka akses 'siapa saja yang punya link' agar Facebook bisa mengambil videonya
+    r2 = requests.post(f"https://www.googleapis.com/drive/v3/files/{info['id']}/permissions",
+                       headers={"Authorization": f"Bearer {tok}"}, json={"role": "reader", "type": "anyone"},
+                       timeout=30)
+    cek(r2, "Membuka akses link video")
+    unduh = f"https://drive.google.com/uc?export=download&id={info['id']}"
+    return info["webViewLink"], unduh
 
 
 # ---------------- PIXABAY ----------------
@@ -140,12 +148,13 @@ def pixabay_videos(keyword, folder, jumlah):
 
 
 # ---------------- ELEVENLABS ----------------
-def tts(text, out_mp3):
+def tts(text, out_mp3, stability=0.35, style=0.35):
     r = requests.post(
         f"https://api.elevenlabs.io/v1/text-to-speech/{VOICE_ID}/with-timestamps",
         headers={"xi-api-key": os.environ["ELEVENLABS_API_KEY"], "Content-Type": "application/json"},
         json={"text": text, "model_id": MODEL_ID,
-              "voice_settings": {"stability": 0.6, "similarity_boost": 0.75}},
+              "voice_settings": {"stability": stability, "similarity_boost": 0.8, "style": style,
+                                 "use_speaker_boost": True}},
         timeout=180)
     if r.status_code != 200:
         raise RuntimeError(f"ElevenLabs error {r.status_code}: {r.text[:300]}")
@@ -206,7 +215,7 @@ def build_ass(question, words, total, out_ass, font_name):
     # Kelompokkan kata jadi potongan pendek (maks 4 kata / 24 huruf) agar mudah dibaca
     chunks, cur = [], []
     for w in words:
-        if cur and (len(cur) >= 5 or len(" ".join(x[0] for x in cur + [w])) > 30):
+        if cur and (len(cur) >= 4 or len(" ".join(x[0] for x in cur + [w])) > 24):
             chunks.append(cur); cur = []
         cur.append(w)
         if w[0][-1] in ".?!,":
@@ -223,9 +232,8 @@ def build_ass(question, words, total, out_ass, font_name):
         lines.append(f"Dialogue: 1,{ass_time(start)},{ass_time(end)},Sub,,0,0,0,,{ass_escape(text)}")
 
     # Ukuran font di subtitle (ASS) dihitung beda dengan di gambar; samakan supaya tampil sama besar
-    from PIL import ImageFont
-    asc, desc = ImageFont.truetype(FONT_FILE, 1000).getmetrics()
-    ukuran_ass = round(UKURAN_SUBTITLE * (asc + desc) / 1000)
+    # (diukur: untuk font Poppins, ukuran ASS x 0,56 = ukuran huruf di gambar)
+    ukuran_ass = round(UKURAN_SUBTITLE * 1.78)
     header = f"""[Script Info]
 ScriptType: v4.00+
 PlayResX: {W}
@@ -368,7 +376,7 @@ def proses(tok, folder_id, row_number, row):
 
     with tempfile.TemporaryDirectory() as d:
         p = lambda n: os.path.join(d, n)
-        tts(tanya, p("q.mp3"))
+        tts(tanya, p("q.mp3"), stability=0.3, style=0.5)  # nada bertanya lebih hidup
         q_len = duration(p("q.mp3"))
         al = tts(jawab, p("a.mp3"))
         words = words_from_alignment(al, q_len + JEDA_DETIK)
@@ -380,8 +388,10 @@ def proses(tok, folder_id, row_number, row):
         kartu_komentar(tanya, p("kartu.png"))
         render(latar, p("audio.m4a"), p("sub.ass"), p("kartu.png"), p("out.mp4"), total,
                os.path.dirname(os.path.abspath(FONT_FILE)), d)
-        link = drive_upload(tok, p("out.mp4"), f"video_{no or row_number}.mp4", folder_id)
-    return link, " ".join(sumber)
+        if total > 89:
+            print(f"  Peringatan: durasi {total:.0f} detik, lebih dari batas Reels Facebook (90 detik).")
+        link, unduh = drive_upload(tok, p("out.mp4"), f"video_{no or row_number}.mp4", folder_id)
+    return link, " ".join(sumber), unduh
 
 
 def persiapan():
@@ -412,10 +422,10 @@ def main():
         print(f"Memproses baris {row_number}: {row[COL_TANYA] if len(row) > 1 else ''}")
         sheet_set(tok, row_number, {COL_STATUS: "proses", COL_ERROR: ""})
         try:
-            link, sumber = proses(tok, folder_id, row_number, row)
+            link, sumber, unduh = proses(tok, folder_id, row_number, row)
             waktu = datetime.datetime.now(datetime.timezone(datetime.timedelta(hours=7))).strftime("%Y-%m-%d %H:%M")
-            sheet_set(tok, row_number, {COL_STATUS: "selesai", COL_LINK: link, COL_ERROR: "",
-                                        COL_WAKTU: waktu, COL_SUMBER: sumber})
+            sheet_set(tok, row_number, {COL_STATUS: STATUS_JADI, COL_LINK: link, COL_ERROR: "",
+                                        COL_WAKTU: waktu, COL_SUMBER: sumber, COL_UNDUH: unduh})
             print(f"  -> selesai: {link}")
         except Exception as e:
             gagal += 1
