@@ -24,6 +24,10 @@ SHEET_NAME = os.environ.get("SHEET_NAME", "Untitled")
 DRIVE_FOLDER_NAME = os.environ.get("DRIVE_FOLDER_NAME", "Video Otomatis GitHub")
 MAX_PER_RUN = int(os.environ.get("MAX_PER_RUN", "3"))
 VOICE_ID = os.environ.get("VOICE_ID", "gmnazjXOFoOcWA59sd5m")  # suara pilihan dari Voice Library
+# Beberapa suara (dipisah koma) -> dipilih acak tiap video agar bervariasi
+VOICE_IDS = [x.strip() for x in os.environ.get("VOICE_IDS", "").split(",") if x.strip()] or [VOICE_ID]
+SUARA_AKTIF = VOICE_ID
+LABEL_KARTU = os.environ.get("LABEL_KARTU", "Tanya Jawab #{no}")  # {no} = nomor baris di kolom A
 MODEL_ID = os.environ.get("MODEL_ID", "eleven_multilingual_v2")
 JEDA_DETIK = float(os.environ.get("JEDA_DETIK", "3"))
 FONT_FILE = os.environ.get("FONT_FILE", "fonts/Poppins-Bold.ttf")
@@ -150,7 +154,7 @@ def pixabay_videos(keyword, folder, jumlah):
 # ---------------- ELEVENLABS ----------------
 def tts(text, out_mp3, stability=0.35, style=0.35):
     r = requests.post(
-        f"https://api.elevenlabs.io/v1/text-to-speech/{VOICE_ID}/with-timestamps",
+        f"https://api.elevenlabs.io/v1/text-to-speech/{SUARA_AKTIF}/with-timestamps",
         headers={"xi-api-key": os.environ["ELEVENLABS_API_KEY"], "Content-Type": "application/json"},
         json={"text": text, "model_id": MODEL_ID,
               "voice_settings": {"stability": stability, "similarity_boost": 0.8, "style": style,
@@ -233,6 +237,7 @@ def build_ass(question, words, total, out_ass, font_name):
 
     # Ukuran font di subtitle (ASS) dihitung beda dengan di gambar; samakan supaya tampil sama besar
     # (diukur: untuk font Poppins, ukuran ASS x 0,56 = ukuran huruf di gambar)
+    warna_sub = random.choice(["&H00FFFFFF", "&H00FFFFFF", "&H0029CCFF"])  # putih / kuning, acak
     ukuran_ass = round(UKURAN_SUBTITLE * 1.78)
     header = f"""[Script Info]
 ScriptType: v4.00+
@@ -243,7 +248,7 @@ ScaledBorderAndShadow: yes
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Sub,{font_name},{ukuran_ass},&H00FFFFFF,&H00FFFFFF,&H00000000,&H64000000,-1,0,0,0,100,100,0,0,1,{max(2, round(UKURAN_SUBTITLE * 0.09))},1,2,70,70,520,1
+Style: Sub,{font_name},{ukuran_ass},{warna_sub},&H00FFFFFF,&H00000000,&H64000000,-1,0,0,0,100,100,0,0,1,{max(2, round(UKURAN_SUBTITLE * 0.09))},1,2,70,70,520,1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
@@ -295,17 +300,27 @@ def avatar_acak(ukuran):
         return None
 
 
-def kartu_komentar(question, out_png):
-    """Gambar kartu putih bergaya 'Membalas komentar' (seperti balasan komentar TikTok/Reels).
-    Semua ukuran mengikuti UKURAN_PERTANYAAN."""
+TEMA_KARTU = [
+    # (latar kartu, teks pertanyaan, teks label, lingkaran ikon) - diacak tiap video
+    ((255, 255, 255, 255), (20, 20, 20, 255), (110, 110, 110, 255), (252, 163, 17, 255)),
+    ((255, 214, 64, 255), (20, 20, 20, 255), (90, 70, 0, 255), (20, 33, 70, 255)),
+    ((20, 33, 70, 245), (255, 255, 255, 255), (255, 204, 41, 255), (255, 204, 41, 255)),
+    ((232, 244, 255, 255), (15, 30, 60, 255), (60, 90, 140, 255), (40, 110, 220, 255)),
+    ((230, 250, 240, 255), (15, 45, 30, 255), (40, 120, 80, 255), (30, 160, 100, 255)),
+]
+
+
+def kartu_komentar(question, out_png, no=""):
+    """Kartu pertanyaan bergaya kartu fakta: label jujur (mis. 'Did you know? | Fact #12'),
+    tanpa nama atau komentar palsu. Warna dan posisi kartu diacak agar tiap video bervariasi."""
     from PIL import Image, ImageDraw, ImageFont
     u = UKURAN_PERTANYAAN
     bold = ImageFont.truetype(FONT_FILE, u)
-    small = ImageFont.truetype(FONT_REGULAR, max(14, round(u * 0.62)))
+    small = ImageFont.truetype(FONT_FILE, max(14, round(u * 0.62)))
     ikon = max(36, round(u * 1.7))
     pad = max(16, round(u * 0.75))
     maks_lebar = 900
-    # bungkus teks sesuai lebar maksimal kartu
+    latar, warna_teks, warna_label, warna_ikon = random.choice(TEMA_KARTU)
     baris, cur = [], ""
     for k in question.split():
         uji = (cur + " " + k).strip()
@@ -315,7 +330,7 @@ def kartu_komentar(question, out_png):
             baris.append(cur); cur = k
     if cur:
         baris.append(cur)
-    label = os.environ.get("LABEL_BALAS", "Balas komentar") + " " + nama_acak()
+    label = LABEL_KARTU.replace("{no}", str(no)).strip()
     lebar_isi = max([bold.getlength(b) for b in baris] + [ikon + pad * 0.6 + small.getlength(label)])
     lebar = int(lebar_isi + 2 * pad)
     tinggi_baris = int(u * 1.3)
@@ -323,24 +338,18 @@ def kartu_komentar(question, out_png):
     tinggi = pad + ikon + jarak + tinggi_baris * len(baris) + pad
     img = Image.new("RGBA", (W, H), (0, 0, 0, 0))
     d = ImageDraw.Draw(img)
-    x0, y0 = (W - lebar) // 2, 300
+    x0, y0 = (W - lebar) // 2, random.randint(240, 420)
     r = round(u * 0.8)
     d.rounded_rectangle([x0 + 5, y0 + 6, x0 + lebar + 5, y0 + tinggi + 6], r, fill=(0, 0, 0, 90))
-    d.rounded_rectangle([x0, y0, x0 + lebar, y0 + tinggi], r, fill=(255, 255, 255, 255))
-    e = round(u * 0.9)
-    d.polygon([(x0 + r, y0 + tinggi - 2), (x0 + r + e, y0 + tinggi - 2), (x0 + r - e // 3, y0 + tinggi + e)],
-              fill=(255, 255, 255, 255))
+    d.rounded_rectangle([x0, y0, x0 + lebar, y0 + tinggi], r, fill=latar)
     ay = y0 + pad
-    foto = avatar_acak(ikon)
-    if foto is not None:
-        img.alpha_composite(foto, (x0 + pad, ay))
-    else:
-        d.ellipse([x0 + pad, ay, x0 + pad + ikon, ay + ikon], fill=(252, 163, 17, 255))
-    d.text((x0 + pad + ikon + round(pad * 0.5), ay + ikon / 2), label, font=small, fill=(110, 110, 110, 255),
+    d.ellipse([x0 + pad, ay, x0 + pad + ikon, ay + ikon], fill=warna_ikon)
+    d.text((x0 + pad + ikon / 2, ay + ikon / 2), "?", font=bold, fill=latar[:3] + (255,), anchor="mm")
+    d.text((x0 + pad + ikon + round(pad * 0.5), ay + ikon / 2), label, font=small, fill=warna_label,
            anchor="lm")
     ty = ay + ikon + jarak
     for b in baris:
-        d.text((x0 + pad, ty), b, font=bold, fill=(20, 20, 20, 255))
+        d.text((x0 + pad, ty), b, font=bold, fill=warna_teks)
         ty += tinggi_baris
     img.save(out_png)
 
@@ -372,6 +381,8 @@ def render(bg_list, audio_m4a, ass_path, kartu_png, out_mp4, total, fonts_dir, f
 
 # ---------------- PROSES SATU BARIS ----------------
 def proses(tok, folder_id, row_number, row):
+    global SUARA_AKTIF
+    SUARA_AKTIF = random.choice(VOICE_IDS)
     get = lambda c: row[c].strip() if len(row) > c else ""
     no, tanya, jawab, kunci = get(COL_NO), get(COL_TANYA), get(COL_JAWAB), get(COL_KATAKUNCI)
     if not tanya or not jawab:
@@ -390,7 +401,7 @@ def proses(tok, folder_id, row_number, row):
         jumlah_klip = max(1, min(MAKS_KLIP, round(total / DETIK_PER_KLIP)))
         latar, sumber = pixabay_videos(kunci, d, jumlah_klip)
         build_ass(tanya, words, total, p("sub.ass"), "Poppins")
-        kartu_komentar(tanya, p("kartu.png"))
+        kartu_komentar(tanya, p("kartu.png"), no or row_number)
         render(latar, p("audio.m4a"), p("sub.ass"), p("kartu.png"), p("out.mp4"), total,
                os.path.dirname(os.path.abspath(FONT_FILE)), d)
         if total > 89:
