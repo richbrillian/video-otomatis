@@ -2,8 +2,9 @@ name: Buat Video Otomatis
 
 on:
   schedule:
-    # Setiap hari jam 05:00 WIB (= 22:00 UTC hari sebelumnya)
-    - cron: "0 22 * * *"
+    # 3x sehari: 05:00, 12:00, 19:00 WIB (= 22:00, 05:00, 12:00 UTC)
+    - cron: "0 22,5,12 * * *"→ Runs at 22:00
+
   workflow_dispatch:
     inputs:
       jumlah:
