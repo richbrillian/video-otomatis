@@ -1,0 +1,69 @@
+name: Buat Video Ulasan (cuplikan + penjelasan)
+
+on:
+  workflow_dispatch:
+    inputs:
+      file_id:
+        description: "ID file video sumber di Google Drive"
+        required: true
+      clip_start:
+        description: "Detik mulai cuplikan asli"
+        default: "0"
+      clip_dur:
+        description: "Panjang cuplikan asli (detik, maks 5)"
+        default: "4"
+      credit:
+        description: "Nama pembuat asli (untuk label kredit)"
+        default: ""
+      hook:
+        description: "Teks kartu hook"
+        required: true
+      narasi:
+        description: "Naskah narasi penjelasan"
+        required: true
+      kata_kunci:
+        description: "Kata kunci latar Pixabay (Inggris)"
+        default: ""
+      nama_file:
+        description: "Nama file hasil"
+        default: ""
+      bahasa:
+        description: "en atau id"
+        default: "en"
+
+jobs:
+  buat:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Pasang FFmpeg, font, dan library
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ffmpeg
+          mkdir -p fonts
+          curl -sSL -o fonts/Poppins-Bold.ttf https://github.com/google/fonts/raw/main/ofl/poppins/Poppins-Bold.ttf
+          pip install -q requests
+      - name: Buat video ulasan
+        env:
+          GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
+          GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
+          GOOGLE_REFRESH_TOKEN: ${{ secrets.GOOGLE_REFRESH_TOKEN }}
+          ELEVENLABS_API_KEY: ${{ secrets.ELEVENLABS_API_KEY }}
+          PIXABAY_API_KEY: ${{ secrets.PIXABAY_API_KEY }}
+          SRC_FILE_ID: ${{ github.event.inputs.file_id }}
+          CLIP_START: ${{ github.event.inputs.clip_start }}
+          CLIP_DUR: ${{ github.event.inputs.clip_dur }}
+          CREDIT: ${{ github.event.inputs.credit }}
+          HOOK: ${{ github.event.inputs.hook }}
+          NARASI: ${{ github.event.inputs.narasi }}
+          KATA_KUNCI: ${{ github.event.inputs.kata_kunci }}
+          NAMA_FILE: ${{ github.event.inputs.nama_file }}
+          DRIVE_FOLDER_NAME: "Video Ulasan"
+          KATA_KUNCI_CADANGAN: "street food market"
+          LABEL_KARTU: ${{ github.event.inputs.bahasa == 'id' && 'Tahukah kamu?' || 'Did you know?' }}
+          VOICE_IDS: ${{ github.event.inputs.bahasa == 'id' && 'gmnazjXOFoOcWA59sd5m' || 'XrExE9yKIg1WjnnlVkGX,hpp4J3VqNfWAUOO0d1Us,onwK4e9ZLuTAKqWW03F9' }}
+        run: python buat_reaksi.py
