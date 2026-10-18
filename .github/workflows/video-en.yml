@@ -43,7 +43,9 @@ jobs:
           DRIVE_FOLDER_NAME: "Video Fakta EN - Daily Fact Bites"
           VOICE_ID: "XrExE9yKIg1WjnnlVkGX"   # Matilda (ElevenLabs, aksen Amerika)
           KATA_KUNCI_CADANGAN: "nature science"
-          LABEL_BALAS: "Replying to"
+          LABEL_KARTU: "Did you know?  |  Fact #{no}"
+          # 3 suara acak: Matilda (US, wanita), Bella (US, wanita), Daniel (UK, pria)
+          VOICE_IDS: "XrExE9yKIg1WjnnlVkGX,hpp4J3VqNfWAUOO0d1Us,onwK4e9ZLuTAKqWW03F9"
           NAMA_DEPAN: "emma,olivia,liam,noah,ava,mia,james,lucas,sophia,ethan,chloe,jack,grace,ryan,ella,mason,lily,owen,zoe,leo"
           NAMA_BELAKANG: "smith,johnson,brown,miller,davis,wilson,taylor,clark,lewis,walker,hall,young"
         run: python buat_video.py
