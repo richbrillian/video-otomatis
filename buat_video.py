@@ -260,6 +260,11 @@ TEMA_AVATAR = ["cat", "kitten", "dog", "puppy", "rabbit", "bird", "flower", "ros
                "tea", "cake", "sunset", "mountain", "beach", "forest", "leaf", "bicycle", "book", "plant", "moon"]
 
 
+if os.environ.get("NAMA_DEPAN"):  # daftar nama lain (dipisah koma), mis. untuk konten bahasa Inggris
+    NAMA_DEPAN = [x.strip().lower() for x in os.environ["NAMA_DEPAN"].split(",") if x.strip()]
+if os.environ.get("NAMA_BELAKANG"):
+    NAMA_BELAKANG = [x.strip().lower() for x in os.environ["NAMA_BELAKANG"].split(",") if x.strip()]
+
 def nama_acak():
     """Nama fiktif acak, contoh: 'Rina' atau 'Dimas Pratama'"""
     depan = random.choice(NAMA_DEPAN).capitalize()
@@ -310,7 +315,7 @@ def kartu_komentar(question, out_png):
             baris.append(cur); cur = k
     if cur:
         baris.append(cur)
-    label = "Balas komentar " + nama_acak()
+    label = os.environ.get("LABEL_BALAS", "Balas komentar") + " " + nama_acak()
     lebar_isi = max([bold.getlength(b) for b in baris] + [ikon + pad * 0.6 + small.getlength(label)])
     lebar = int(lebar_isi + 2 * pad)
     tinggi_baris = int(u * 1.3)
