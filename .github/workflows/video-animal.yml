@@ -1,0 +1,48 @@
+name: Buat Video Animal Facts (Pawsome Facts)
+
+on:
+  schedule:
+    # 2x sehari: 10:00 dan 18:00 WIB (= 03:00 dan 11:00 UTC)
+    - cron: "0 3,11 * * *"
+  workflow_dispatch:
+    inputs:
+      jumlah:
+        description: "Jumlah video yang dibuat sekali jalan"
+        default: "1"
+
+jobs:
+  buat-video:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Pasang FFmpeg, font, dan library
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ffmpeg
+          mkdir -p fonts
+          curl -sSL -o fonts/Poppins-Bold.ttf https://github.com/google/fonts/raw/main/ofl/poppins/Poppins-Bold.ttf
+          pip install -q requests
+
+      - name: Buat video
+        env:
+          GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
+          GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
+          GOOGLE_REFRESH_TOKEN: ${{ secrets.GOOGLE_REFRESH_TOKEN }}
+          ELEVENLABS_API_KEY: ${{ secrets.ELEVENLABS_API_KEY }}
+          PIXABAY_API_KEY: ${{ secrets.PIXABAY_API_KEY }}
+          MAX_PER_RUN: ${{ github.event.inputs.jumlah || '1' }}
+          # --- pengaturan khusus Page Pawsome Facts ---
+          SPREADSHEET_ID: "1m-gAVr6endxriNeIMXrs8pueMVkYZUxpb43qqLIVJv4"
+          SHEET_NAME: "Untitled"
+          DRIVE_FOLDER_NAME: "Video Animal Facts - Pawsome Facts"
+          KATA_KUNCI_CADANGAN: "wildlife animals"
+          LABEL_KARTU: "Animal fact #{no}"
+          # 3 suara acak: Alice (UK, wanita), Lily (UK, wanita), Bella (US, wanita)
+          VOICE_IDS: "Xb7hH8MSUJpSbSDYk0k2,pFZP5JQG7iQjIQuC4Bku,hpp4J3VqNfWAUOO0d1Us"
+        run: python buat_video.py
