@@ -1,0 +1,49 @@
+name: Buat Video Fakta EN (Daily Fact Bites)
+
+on:
+  schedule:
+    # 3x sehari: 06:30, 13:30, 20:30 WIB (= 23:30, 06:30, 13:30 UTC)
+    - cron: "30 23,6,13 * * *"
+  workflow_dispatch:
+    inputs:
+      jumlah:
+        description: "Jumlah video yang dibuat sekali jalan"
+        default: "1"
+
+jobs:
+  buat-video:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Pasang FFmpeg, font, dan library
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ffmpeg
+          mkdir -p fonts
+          curl -sSL -o fonts/Poppins-Bold.ttf https://github.com/google/fonts/raw/main/ofl/poppins/Poppins-Bold.ttf
+          pip install -q requests
+
+      - name: Buat video
+        env:
+          GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
+          GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
+          GOOGLE_REFRESH_TOKEN: ${{ secrets.GOOGLE_REFRESH_TOKEN }}
+          ELEVENLABS_API_KEY: ${{ secrets.ELEVENLABS_API_KEY }}
+          PIXABAY_API_KEY: ${{ secrets.PIXABAY_API_KEY }}
+          MAX_PER_RUN: ${{ github.event.inputs.jumlah || '1' }}
+          # --- pengaturan khusus Page bahasa Inggris ---
+          SPREADSHEET_ID: "1XDCzoSXYjmSksGXATq8f1qsRNgXkJqajN0aukGvxDNQ"
+          SHEET_NAME: "Sheet1"
+          DRIVE_FOLDER_NAME: "Video Fakta EN - Daily Fact Bites"
+          VOICE_ID: "XrExE9yKIg1WjnnlVkGX"   # Matilda (ElevenLabs, aksen Amerika)
+          KATA_KUNCI_CADANGAN: "nature science"
+          LABEL_BALAS: "Replying to"
+          NAMA_DEPAN: "emma,olivia,liam,noah,ava,mia,james,lucas,sophia,ethan,chloe,jack,grace,ryan,ella,mason,lily,owen,zoe,leo"
+          NAMA_BELAKANG: "smith,johnson,brown,miller,davis,wilson,taylor,clark,lewis,walker,hall,young"
+        run: python buat_video.py
