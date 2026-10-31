@@ -1,0 +1,78 @@
+name: Buat Video Fakta (Remotion)
+
+# Sengaja HANYA manual dulu (tanpa jadwal), supaya alur lama (video-en.yml) tidak terganggu.
+# Setelah hasilnya bagus, jadwal bisa dipindah ke sini (lihat catatan di bawah).
+#
+# mode = contoh -> uji tampilan saja (tanpa Sheet dan tanpa ElevenLabs); video ada di Artifacts
+# mode = sheet  -> proses baris berstatus "siap" di Sheet, hasil ke Drive, status jadi "siap posting"
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "contoh = uji tampilan, sheet = proses baris 'siap'"
+        type: choice
+        options:
+          - contoh
+          - sheet
+        default: contoh
+      jumlah:
+        description: "Jumlah video sekali jalan (mode sheet)"
+        default: "1"
+  # Untuk jadwal otomatis nanti, hapus tanda # di 3 baris berikut dan nonaktifkan jadwal di video-en.yml:
+  # schedule:
+  #   # 3x sehari: 06:30, 13:30, 20:30 WIB (= 23:30, 06:30, 13:30 UTC)
+  #   - cron: "30 23,6,13 * * *"
+
+jobs:
+  buat-video:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Pasang FFmpeg dan library Python
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ffmpeg
+          pip install -q requests
+
+      - name: Pasang Remotion
+        working-directory: remotion
+        run: |
+          npm install --no-audit --no-fund
+          npx remotion browser ensure || true
+
+      - name: Buat video
+        env:
+          MODE: ${{ github.event.inputs.mode || 'sheet' }}
+          GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
+          GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
+          GOOGLE_REFRESH_TOKEN: ${{ secrets.GOOGLE_REFRESH_TOKEN }}
+          ELEVENLABS_API_KEY: ${{ secrets.ELEVENLABS_API_KEY }}
+          PIXABAY_API_KEY: ${{ secrets.PIXABAY_API_KEY }}
+          MAX_PER_RUN: ${{ github.event.inputs.jumlah || '1' }}
+          # --- pengaturan Page/kanal berbahasa Inggris (sama dengan video-en.yml) ---
+          SPREADSHEET_ID: "1XDCzoSXYjmSksGXATq8f1qsRNgXkJqajN0aukGvxDNQ"
+          SHEET_NAME: "Sheet1"
+          DRIVE_FOLDER_NAME: "Video Fakta EN - Daily Fact Bites"
+          VOICE_ID: "XrExE9yKIg1WjnnlVkGX"   # Matilda (ElevenLabs, aksen Amerika)
+          VOICE_IDS: "XrExE9yKIg1WjnnlVkGX,hpp4J3VqNfWAUOO0d1Us,onwK4e9ZLuTAKqWW03F9"
+          KATA_KUNCI_CADANGAN: "nature science"
+          LABEL_KANAL: "DAILY FACT BITES"
+        run: python buat_video_remotion.py
+
+      - name: Simpan video contoh (Artifacts)
+        if: always() && github.event.inputs.mode == 'contoh'
+        uses: actions/upload-artifact@v4
+        with:
+          name: video-contoh
+          path: remotion/out/*.mp4
+          if-no-files-found: ignore
