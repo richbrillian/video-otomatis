@@ -85,7 +85,7 @@ const PALET: Record<string, [string, string]> = {
   "#7CFF6B": ["#06241a", "#0f6b4a"],
 };
 
-const Scene: React.FC<{accent: string}> = ({accent}) => {
+const Scene: React.FC<{accent: string; overlay?: boolean}> = ({accent, overlay}) => {
   const frame = useCurrentFrame();
   const {fps, width, height} = useVideoConfig();
   const t = frame / fps;
@@ -93,7 +93,14 @@ const Scene: React.FC<{accent: string}> = ({accent}) => {
   const drift = 1.06 + 0.03 * Math.sin(t * 0.6);
   const sweepX = interpolate((t % 4.5) / 4.5, [0, 1], [-1400, width + 600]);
   return (
-    <AbsoluteFill style={{overflow: "hidden", background: `linear-gradient(${160 + t * 9}deg, ${c1} 0%, ${c2} 55%, ${c1} 100%)`}}>
+    <AbsoluteFill
+      style={{
+        overflow: "hidden",
+        ...(overlay
+          ? {mixBlendMode: "screen" as const, opacity: 0.55}
+          : {background: `linear-gradient(${160 + t * 9}deg, ${c1} 0%, ${c2} 55%, ${c1} 100%)`}),
+      }}
+    >
       <AbsoluteFill style={{transform: `scale(${drift}) rotate(${Math.sin(t * 0.4) * 1.5}deg)`}}>
         {Array.from({length: 6}).map((_, i) => {
           const x = width * (0.5 + 0.42 * Math.sin(t * (0.32 + 0.11 * i) + i * 1.7));
@@ -176,6 +183,9 @@ const Scene: React.FC<{accent: string}> = ({accent}) => {
 const Background: React.FC<{clips: string[]; accent: string}> = ({clips, accent}) => {
   const {durationInFrames} = useVideoConfig();
   const seg = Math.ceil(durationInFrames / Math.max(1, clips.length));
+  const [c1] = PALET[accent] ?? ["#0b1d3a", "#1f4aa0"];
+  // Tanpa klip: animasi penuh. Dengan klip: footage jadi dasar, animasi kode digabung di atasnya.
+  if (clips.length === 0) return <Scene accent={accent} />;
   return (
     <AbsoluteFill style={{backgroundColor: "#000"}}>
       <Scene accent={accent} />
@@ -185,12 +195,12 @@ const Background: React.FC<{clips: string[]; accent: string}> = ({clips, accent}
         if (len <= 0) return null;
         return (
           <Sequence key={c} from={from} durationInFrames={len}>
-            <AbsoluteFill style={{opacity: 0.4}}>
-              <Clip src={c} len={len} flip={i % 2 === 1} />
-            </AbsoluteFill>
+            <Clip src={c} len={len} flip={i % 2 === 1} />
           </Sequence>
         );
       })}
+      <AbsoluteFill style={{background: c1, opacity: 0.22}} />
+      <Scene accent={accent} overlay />
     </AbsoluteFill>
   );
 };
@@ -396,7 +406,7 @@ const Captions: React.FC<{words: Word[]; accent: string}> = ({words, accent}) =>
             key={`${idx}-${i}`}
             style={{
               display: "inline-block",
-              marginRight: 22,
+              marginRight: 36,
               color: i === active ? accent : "#fff",
               WebkitTextStroke: "14px #000",
               paintOrder: "stroke fill",
