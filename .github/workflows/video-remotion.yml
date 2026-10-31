@@ -6,6 +6,8 @@ name: Buat Video Fakta (Remotion)
 # mode = contoh -> uji tampilan saja (tanpa Sheet dan tanpa ElevenLabs); video ada di Artifacts
 # mode = sheet  -> proses baris berstatus "siap" di Sheet, hasil ke Drive, status jadi "siap posting"
 on:
+schedulu:
+-cron: "3023,6,13 ***"
   workflow_dispatch:
     inputs:
       mode:
