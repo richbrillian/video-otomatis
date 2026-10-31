@@ -7,6 +7,8 @@ Mode (variabel MODE):
 
 Latar default = animasi hasil kode (tanpa footage stok). Footage Pixabay bisa dinyalakan
 dengan LATAR_KLIP=1 (tampil redup di atas animasi).
+Musik latar dibuat sendiri lewat kode (buat_musik.py, bebas hak cipta). Matikan dengan MUSIK=0,
+atur volume dengan MUSIK_VOLUME (default 0.22).
 
 Fungsi login Google, Sheet, Drive, Pixabay, dan ElevenLabs dipakai dari buat_video.py, jadi
 kunci rahasia tetap dari GitHub Secrets dan kolom Sheet sama dengan alur lama.
@@ -23,6 +25,7 @@ import traceback
 from pathlib import Path
 
 import buat_video as bv
+from buat_musik import buat_musik
 
 RDIR = Path(__file__).resolve().parent / "remotion"
 JOB = RDIR / "public" / "job"
@@ -33,6 +36,8 @@ LABEL = os.environ.get("LABEL_KANAL", "DAILY FACT BITES")
 WARNA = ["#FFC400", "#00E5FF", "#FF4D8D", "#7CFF6B"]
 DETIK_PER_KLIP = float(os.environ.get("DETIK_PER_KLIP_RM", "4"))
 BROWSER = os.environ.get("BROWSER_EXECUTABLE", "")  # kosong = Remotion mengunduh Chrome sendiri
+MUSIK = os.environ.get("MUSIK", "1") != "0"
+MUSIK_VOLUME = float(os.environ.get("MUSIK_VOLUME", "0.22"))
 
 
 def siapkan_folder():
@@ -56,7 +61,20 @@ def ambil_klip(kunci, dur):
         return [], ""
 
 
-def susun_props(hook, words, dur, clips):
+def siapkan_musik(dur):
+    """Buat musik latar sepanjang video. Bila gagal, video tetap jadi tanpa musik."""
+    if not MUSIK:
+        return ""
+    try:
+        gaya = buat_musik(JOB / "musik.mp3", dur)
+        print(f"  Musik latar: gaya {gaya}")
+        return "job/musik.mp3"
+    except Exception as e:  # noqa: BLE001
+        print("  Musik gagal dibuat, lanjut tanpa musik:", str(e)[:200])
+        return ""
+
+
+def susun_props(hook, words, dur, clips, music=""):
     if not words:
         raise RuntimeError("Tidak ada data kata dari ElevenLabs.")
     hook_n = min(max(1, len(hook.split())), len(words))
@@ -71,6 +89,8 @@ def susun_props(hook, words, dur, clips):
         "clips": clips,
         "audio": "job/voice.mp3",
         "accent": random.choice(WARNA),
+        "music": music,
+        "musicVolume": MUSIK_VOLUME,
     }
 
 
@@ -99,7 +119,7 @@ def mode_contoh():
     bv.run(["ffmpeg", "-y", "-loglevel", "error", "-f", "lavfi", "-i", "anullsrc=r=44100:cl=mono",
             "-t", f"{dur:.2f}", "-q:a", "9", str(JOB / "voice.mp3")])
     clips, _ = ambil_klip("banana fruit", dur)
-    props = susun_props(hook, words, dur, clips)
+    props = susun_props(hook, words, dur, clips, siapkan_musik(dur))
     out = OUT / "contoh.mp4"
     render_remotion(props, out)
     print(f"Selesai: {out} ({dur:.1f} detik, klip latar: {len(clips)})")
@@ -126,7 +146,7 @@ def proses(tok, folder_id, row_number, row):
     words = bv.words_from_alignment(al, 0.0)
     dur = bv.duration(str(mp3)) + 0.6
     clips, sumber = ambil_klip(kunci, dur)
-    props = susun_props(hook, words, dur, clips)
+    props = susun_props(hook, words, dur, clips, siapkan_musik(dur))
     out = OUT / f"video_{no or row_number}.mp4"
     render_remotion(props, out)
     link, unduh = bv.drive_upload(tok, str(out), out.name, folder_id)
