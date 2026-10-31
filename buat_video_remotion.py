@@ -6,7 +6,7 @@ Mode (variabel MODE):
             -> Remotion -> Google Drive -> Sheet (status 'siap posting')
 
 Latar default = animasi hasil kode (tanpa footage stok). Footage Pixabay bisa dinyalakan
-dengan LATAR_KLIP=1 (tampil redup di atas animasi).
+(default aktif; LATAR_KLIP=0 untuk animasi saja).
 Musik latar dibuat sendiri lewat kode (buat_musik.py, bebas hak cipta). Matikan dengan MUSIK=0,
 atur volume dengan MUSIK_VOLUME (default 0.22).
 
@@ -48,17 +48,21 @@ def siapkan_folder():
 
 def ambil_klip(kunci, dur):
     """Unduh klip latar dari Pixabay. Bila gagal, kembalikan daftar kosong (latar gradasi)."""
-    if os.environ.get("LATAR_KLIP", "0") != "1":
-        return [], ""  # default: latar animasi hasil kode (Remotion), tanpa footage stok
-    n = max(2, min(bv.MAKS_KLIP, round(dur / DETIK_PER_KLIP)))
-    try:
-        paths, sumber = bv.pixabay_videos(kunci or "nature", str(JOB), n)
-        return [f"job/{Path(x).name}" for x in paths], " ".join(sumber)
-    except Exception as e:  # noqa: BLE001
-        print("  Latar Pixabay gagal, pakai gradasi:", str(e)[:200])
-        for f in JOB.glob("bg*.mp4"):
-            f.unlink()
-        return [], ""
+    if os.environ.get("LATAR_KLIP", "1") != "1":
+        return [], ""  # LATAR_KLIP=0: hanya animasi kode
+    n = max(3, min(bv.MAKS_KLIP, round(dur / DETIK_PER_KLIP)))
+    # Coba kata kunci dari kolom K, lalu kata pertamanya, lalu cadangan umum.
+    kandidat = [kunci or "nature", (kunci or "nature").split()[0], "wildlife animals", "nature"]
+    for k in dict.fromkeys(kandidat):
+        try:
+            paths, sumber = bv.pixabay_videos(k, str(JOB), n)
+            return [f"job/{Path(x).name}" for x in paths], " ".join(sumber)
+        except Exception as e:  # noqa: BLE001
+            print(f"  Pixabay '{k}' gagal:", str(e)[:150])
+            for f in JOB.glob("bg*.mp4"):
+                f.unlink()
+    print("  Semua kata kunci gagal, pakai animasi saja")
+    return [], ""
 
 
 def siapkan_musik(dur):
