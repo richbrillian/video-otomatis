@@ -7,6 +7,7 @@ import {
   continueRender,
   delayRender,
   interpolate,
+  random,
   spring,
   staticFile,
   useCurrentFrame,
@@ -61,7 +62,7 @@ export const defaultProps: FactProps = {
 
 const clampBoth = {extrapolateLeft: "clamp", extrapolateRight: "clamp"} as const;
 
-// ---------- Latar: klip bergantian dengan zoom pelan, atau gradasi bila tidak ada klip ----------
+// ---------- Latar: klip video bergantian dengan zoom pelan, atau gradasi bila tidak ada klip ----------
 const Clip: React.FC<{src: string; len: number; flip: boolean}> = ({src, len, flip}) => {
   const frame = useCurrentFrame();
   const scale = interpolate(frame, [0, len], flip ? [1.14, 1.0] : [1.0, 1.14], clampBoth);
@@ -76,27 +77,117 @@ const Clip: React.FC<{src: string; len: number; flip: boolean}> = ({src, len, fl
   );
 };
 
-const Background: React.FC<{clips: string[]}> = ({clips}) => {
+// ---------- Latar animasi hasil kode: gradasi bergerak, bola cahaya, cincin, partikel, sapuan cahaya ----------
+const PALET: Record<string, [string, string]> = {
+  "#FFC400": ["#1b0f3a", "#5b2a86"],
+  "#00E5FF": ["#04122e", "#0b4a8f"],
+  "#FF4D8D": ["#2a0a2e", "#8a1c5c"],
+  "#7CFF6B": ["#06241a", "#0f6b4a"],
+};
+
+const Scene: React.FC<{accent: string}> = ({accent}) => {
   const frame = useCurrentFrame();
-  const {durationInFrames} = useVideoConfig();
-  if (clips.length === 0) {
-    const angle = 160 + interpolate(frame, [0, durationInFrames], [0, 70]);
-    return (
-      <AbsoluteFill
-        style={{background: `linear-gradient(${angle}deg, #0b1d3a 0%, #1f4aa0 50%, #0b1d3a 100%)`}}
+  const {fps, width, height} = useVideoConfig();
+  const t = frame / fps;
+  const [c1, c2] = PALET[accent] ?? ["#0b1d3a", "#1f4aa0"];
+  const drift = 1.06 + 0.03 * Math.sin(t * 0.6);
+  const sweepX = interpolate((t % 4.5) / 4.5, [0, 1], [-1400, width + 600]);
+  return (
+    <AbsoluteFill style={{overflow: "hidden", background: `linear-gradient(${160 + t * 9}deg, ${c1} 0%, ${c2} 55%, ${c1} 100%)`}}>
+      <AbsoluteFill style={{transform: `scale(${drift}) rotate(${Math.sin(t * 0.4) * 1.5}deg)`}}>
+        {Array.from({length: 6}).map((_, i) => {
+          const x = width * (0.5 + 0.42 * Math.sin(t * (0.32 + 0.11 * i) + i * 1.7));
+          const y = height * (0.5 + 0.42 * Math.cos(t * (0.26 + 0.09 * i) + i * 2.3));
+          const r = 300 + i * 55;
+          const col = i % 2 === 0 ? accent : c2;
+          return (
+            <div
+              key={`b${i}`}
+              style={{
+                position: "absolute",
+                left: x - r,
+                top: y - r,
+                width: r * 2,
+                height: r * 2,
+                borderRadius: "50%",
+                background: `radial-gradient(circle, ${col}${i % 2 === 0 ? "55" : "99"} 0%, transparent 68%)`,
+              }}
+            />
+          );
+        })}
+        {[0, 1, 2].map((i) => {
+          const p = (t * 0.45 + i / 3) % 1;
+          const size = 220 + p * 1500;
+          return (
+            <div
+              key={`r${i}`}
+              style={{
+                position: "absolute",
+                left: width / 2 - size / 2,
+                top: height * 0.5 - size / 2,
+                width: size,
+                height: size,
+                borderRadius: "50%",
+                border: `7px solid ${accent}`,
+                opacity: (1 - p) * 0.28,
+              }}
+            />
+          );
+        })}
+        {Array.from({length: 30}).map((_, i) => {
+          const speed = 70 + random(`sp${i}`) * 160;
+          const size = 8 + random(`sz${i}`) * 26;
+          const x = random(`px${i}`) * width + Math.sin(t * 0.9 + i) * 34;
+          const y = height + 60 - ((t * speed + random(`py${i}`) * height) % (height + 120));
+          const col = i % 3 === 0 ? accent : "#ffffff";
+          return (
+            <div
+              key={`p${i}`}
+              style={{
+                position: "absolute",
+                left: x,
+                top: y,
+                width: size,
+                height: size,
+                borderRadius: i % 4 === 0 ? 4 : "50%",
+                background: col,
+                opacity: 0.14 + random(`op${i}`) * 0.4,
+                transform: `rotate(${t * 60 * (i % 2 ? 1 : -1)}deg)`,
+              }}
+            />
+          );
+        })}
+      </AbsoluteFill>
+      <div
+        style={{
+          position: "absolute",
+          top: -200,
+          left: sweepX,
+          width: 260,
+          height: height + 400,
+          transform: "rotate(18deg)",
+          background: "linear-gradient(90deg, transparent, rgba(255,255,255,0.10), transparent)",
+        }}
       />
-    );
-  }
-  const seg = Math.ceil(durationInFrames / clips.length);
+    </AbsoluteFill>
+  );
+};
+
+const Background: React.FC<{clips: string[]; accent: string}> = ({clips, accent}) => {
+  const {durationInFrames} = useVideoConfig();
+  const seg = Math.ceil(durationInFrames / Math.max(1, clips.length));
   return (
     <AbsoluteFill style={{backgroundColor: "#000"}}>
+      <Scene accent={accent} />
       {clips.map((c, i) => {
         const from = i * seg;
         const len = Math.min(seg, durationInFrames - from);
         if (len <= 0) return null;
         return (
           <Sequence key={c} from={from} durationInFrames={len}>
-            <Clip src={c} len={len} flip={i % 2 === 1} />
+            <AbsoluteFill style={{opacity: 0.4}}>
+              <Clip src={c} len={len} flip={i % 2 === 1} />
+            </AbsoluteFill>
           </Sequence>
         );
       })}
@@ -104,48 +195,95 @@ const Background: React.FC<{clips: string[]}> = ({clips}) => {
   );
 };
 
-// ---------- Hook besar di awal ----------
+// ---------- Hook besar di awal: pill "DID YOU KNOW?", kata muncul satu-satu, kata terakhir disorot ----------
 const HookBig: React.FC<{text: string; end: number; accent: string}> = ({text, end, accent}) => {
   const frame = useCurrentFrame();
   const {fps} = useVideoConfig();
   const endF = Math.round(end * fps);
-  const pop = spring({frame, fps, config: {damping: 12, stiffness: 150, mass: 0.7}});
   const fade = interpolate(frame, [endF - 8, endF], [1, 0], clampBoth);
-  const grow = interpolate(frame, [endF - 8, endF], [1, 1.08], clampBoth);
-  const scale = interpolate(pop, [0, 1], [0.7, 1]) * grow;
-  const size = text.length > 70 ? 80 : text.length > 42 ? 94 : 108;
+  const lift = interpolate(frame, [endF - 8, endF], [0, -40], clampBoth);
+  const words = text.split(" ").filter(Boolean);
+  const size = text.length > 70 ? 82 : text.length > 42 ? 98 : 116;
+  const pill = spring({frame, fps, config: {damping: 13, stiffness: 160, mass: 0.6}});
+  const barW = interpolate(
+    spring({frame: frame - 6 - words.length * 3, fps, config: {damping: 16, stiffness: 120}}),
+    [0, 1],
+    [0, 360],
+  );
+  const hiFrom = Math.max(0, words.length - 2); // dua kata terakhir disorot
   return (
     <AbsoluteFill
       style={{
         justifyContent: "center",
         alignItems: "center",
-        padding: "0 64px 160px 64px",
+        padding: "0 56px 150px 56px",
         opacity: fade,
-        transform: `scale(${scale})`,
+        transform: `translateY(${lift}px)`,
       }}
     >
       <div
         style={{
           fontFamily,
           fontWeight: 800,
+          fontSize: 44,
+          letterSpacing: 6,
+          color: "#111",
+          background: accent,
+          padding: "12px 38px",
+          borderRadius: 999,
+          marginBottom: 46,
+          transform: `scale(${interpolate(pill, [0, 1], [0.4, 1])}) rotate(-3deg)`,
+          boxShadow: "0 10px 0 rgba(0,0,0,0.55)",
+        }}
+      >
+        DID YOU KNOW?
+      </div>
+      <div
+        style={{
+          display: "flex",
+          flexWrap: "wrap",
+          justifyContent: "center",
+          columnGap: 26,
+          rowGap: 4,
+          fontFamily,
+          fontWeight: 800,
           fontSize: size,
           lineHeight: 1.12,
           textAlign: "center",
-          color: "#fff",
-          WebkitTextStroke: "14px #000",
-          paintOrder: "stroke fill",
-          textShadow: "0 12px 40px rgba(0,0,0,0.55)",
+          textTransform: "uppercase",
         }}
       >
-        {text}
+        {words.map((w, i) => {
+          const sp = spring({
+            frame: frame - 4 - i * 3,
+            fps,
+            config: {damping: 11, stiffness: 190, mass: 0.6},
+          });
+          return (
+            <span
+              key={i}
+              style={{
+                display: "inline-block",
+                color: i >= hiFrom ? accent : "#fff",
+                WebkitTextStroke: "16px #000",
+                paintOrder: "stroke fill",
+                opacity: interpolate(sp, [0, 1], [0, 1]),
+                transform: `translateY(${interpolate(sp, [0, 1], [60, 0])}px) scale(${interpolate(sp, [0, 1], [0.6, 1])})`,
+                textShadow: "0 14px 36px rgba(0,0,0,0.5)",
+              }}
+            >
+              {w}
+            </span>
+          );
+        })}
       </div>
-      <div style={{marginTop: 40, width: 240, height: 16, borderRadius: 8, background: accent}} />
+      <div style={{marginTop: 44, width: barW, height: 20, borderRadius: 10, background: accent, boxShadow: "0 8px 0 rgba(0,0,0,0.55)"}} />
     </AbsoluteFill>
   );
 };
 
-// ---------- Judul kecil di atas setelah hook selesai ----------
-const HookTop: React.FC<{text: string; start: number}> = ({text, start}) => {
+// ---------- Judul kecil di atas setelah hook selesai (kartu dengan garis aksen) ----------
+const HookTop: React.FC<{text: string; start: number; accent: string}> = ({text, start, accent}) => {
   const frame = useCurrentFrame();
   const {fps} = useVideoConfig();
   const s = Math.round(start * fps);
@@ -155,23 +293,30 @@ const HookTop: React.FC<{text: string; start: number}> = ({text, start}) => {
     <div
       style={{
         position: "absolute",
-        top: 210,
+        top: 200,
         left: 56,
         right: 56,
         opacity: o,
         transform: `translateY(${y}px)`,
-        textAlign: "center",
-        fontFamily,
-        fontWeight: 700,
-        fontSize: 46,
-        lineHeight: 1.22,
-        color: "#fff",
-        background: "rgba(0,0,0,0.5)",
-        borderRadius: 30,
-        padding: "22px 32px",
+        display: "flex",
+        background: "rgba(0,0,0,0.62)",
+        borderRadius: 28,
+        overflow: "hidden",
       }}
     >
-      {text}
+      <div style={{width: 16, background: accent, flexShrink: 0}} />
+      <div
+        style={{
+          padding: "22px 30px",
+          fontFamily,
+          fontWeight: 700,
+          fontSize: 46,
+          lineHeight: 1.22,
+          color: "#fff",
+        }}
+      >
+        {text}
+      </div>
     </div>
   );
 };
@@ -255,6 +400,7 @@ const Captions: React.FC<{words: Word[]; accent: string}> = ({words, accent}) =>
               color: i === active ? accent : "#fff",
               WebkitTextStroke: "14px #000",
               paintOrder: "stroke fill",
+              transform: i === active ? "scale(1.14) rotate(-2deg)" : "none",
             }}
           >
             {w.t.replace(/[.,!?]+$/, "")}
@@ -306,7 +452,7 @@ export const FactVideo: React.FC<FactProps> = (p) => {
   const captionWords = p.words.slice(p.hookWordCount);
   return (
     <AbsoluteFill style={{backgroundColor: "#000"}}>
-      <Background clips={p.clips} />
+      <Background clips={p.clips} accent={p.accent} />
       <AbsoluteFill
         style={{
           background:
@@ -315,7 +461,7 @@ export const FactVideo: React.FC<FactProps> = (p) => {
       />
       {p.audio ? <Audio src={staticFile(p.audio)} /> : null}
       <Captions words={captionWords} accent={p.accent} />
-      <HookTop text={p.hook} start={hookEnd - 0.1} />
+      <HookTop text={p.hook} start={hookEnd - 0.1} accent={p.accent} />
       <Sequence from={0} durationInFrames={Math.round((hookEnd + 0.1) * FPS)} layout="none">
         <HookBig text={p.hook} end={hookEnd} accent={p.accent} />
       </Sequence>

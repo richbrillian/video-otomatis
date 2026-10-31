@@ -1,9 +1,12 @@
-"""Video fakta pendek dengan Remotion: hook besar di awal, teks per kata, latar bergerak.
+"""Video fakta pendek dengan Remotion: hook besar di awal, teks per kata, latar animasi hasil kode.
 
 Mode (variabel MODE):
   contoh -> uji tampilan saja: tanpa Sheet dan tanpa ElevenLabs (suara hening, waktu kata palsu)
-  sheet  -> alur nyata: Sheet (status 'siap') -> ElevenLabs (hook + jawaban) -> Pixabay
+  sheet  -> alur nyata: Sheet (status 'siap') -> ElevenLabs (hook + jawaban)
             -> Remotion -> Google Drive -> Sheet (status 'siap posting')
+
+Latar default = animasi hasil kode (tanpa footage stok). Footage Pixabay bisa dinyalakan
+dengan LATAR_KLIP=1 (tampil redup di atas animasi).
 
 Fungsi login Google, Sheet, Drive, Pixabay, dan ElevenLabs dipakai dari buat_video.py, jadi
 kunci rahasia tetap dari GitHub Secrets dan kolom Sheet sama dengan alur lama.
@@ -40,6 +43,8 @@ def siapkan_folder():
 
 def ambil_klip(kunci, dur):
     """Unduh klip latar dari Pixabay. Bila gagal, kembalikan daftar kosong (latar gradasi)."""
+    if os.environ.get("LATAR_KLIP", "0") != "1":
+        return [], ""  # default: latar animasi hasil kode (Remotion), tanpa footage stok
     n = max(2, min(bv.MAKS_KLIP, round(dur / DETIK_PER_KLIP)))
     try:
         paths, sumber = bv.pixabay_videos(kunci or "nature", str(JOB), n)
