@@ -205,7 +205,7 @@ const Background: React.FC<{clips: string[]; accent: string}> = ({clips, accent}
   );
 };
 
-// ---------- Hook besar di awal: pill "DID YOU KNOW?", kata muncul satu-satu, kata terakhir disorot ----------
+// ---------- Hook besar di awal: pill "DID YOU KNOW?", kata muncul nyaris seketika, kata terakhir disorot ----------
 const HookBig: React.FC<{text: string; end: number; accent: string}> = ({text, end, accent}) => {
   const frame = useCurrentFrame();
   const {fps} = useVideoConfig();
@@ -214,9 +214,9 @@ const HookBig: React.FC<{text: string; end: number; accent: string}> = ({text, e
   const lift = interpolate(frame, [endF - 8, endF], [0, -40], clampBoth);
   const words = text.split(" ").filter(Boolean);
   const size = text.length > 70 ? 82 : text.length > 42 ? 98 : 116;
-  const pill = spring({frame, fps, config: {damping: 13, stiffness: 160, mass: 0.6}});
+  const pill = spring({frame, fps, config: {damping: 16, stiffness: 300, mass: 0.5}});
   const barW = interpolate(
-    spring({frame: frame - 6 - words.length * 3, fps, config: {damping: 16, stiffness: 120}}),
+    spring({frame: frame - 3 - words.length, fps, config: {damping: 16, stiffness: 200}}),
     [0, 1],
     [0, 360],
   );
@@ -265,9 +265,9 @@ const HookBig: React.FC<{text: string; end: number; accent: string}> = ({text, e
       >
         {words.map((w, i) => {
           const sp = spring({
-            frame: frame - 4 - i * 3,
+            frame: frame - i,
             fps,
-            config: {damping: 11, stiffness: 190, mass: 0.6},
+            config: {damping: 14, stiffness: 300, mass: 0.5},
           });
           return (
             <span
