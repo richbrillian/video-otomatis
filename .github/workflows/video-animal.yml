@@ -41,8 +41,8 @@ jobs:
           SPREADSHEET_ID: "1m-gAVr6endxriNeIMXrs8pueMVkYZUxpb43qqLIVJv4"
           SHEET_NAME: "Untitled"
           DRIVE_FOLDER_NAME: "Video Animal Facts - Pawsome Facts"
-          KATA_KUNCI_CADANGAN: "wildlife animals"
-          LABEL_KARTU: "Animal fact #{no}"
+          KATA_KUNCI_CADANGAN: "smartphone social media"
+          LABEL_KARTU: "Facebook tip #{no}"
           # 3 suara acak: Alice (UK, wanita), Lily (UK, wanita), Bella (US, wanita)
           VOICE_IDS: "Xb7hH8MSUJpSbSDYk0k2,pFZP5JQG7iQjIQuC4Bku,hpp4J3VqNfWAUOO0d1Us"
         run: python buat_video.py
