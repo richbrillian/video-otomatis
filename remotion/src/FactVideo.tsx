@@ -44,6 +44,10 @@ export type FactProps = {
   clips: string[]; // klip latar, mis. "job/bg0.mp4" (relatif ke folder public)
   audio: string; // mis. "job/voice.mp3"; kosong = tanpa suara
   accent: string; // warna aksen
+  pill?: string; // teks label di atas hook (default "DID YOU KNOW?")
+  stickman?: boolean; // tampilkan karakter stickman + ajakan follow di tengah video (default true)
+  ctaAt?: number; // detik munculnya ajakan follow di tengah video (default 8)
+  cta?: string; // teks kecil di bawah "FOLLOW"
 };
 
 export const defaultProps: FactProps = {
@@ -205,8 +209,8 @@ const Background: React.FC<{clips: string[]; accent: string}> = ({clips, accent}
   );
 };
 
-// ---------- Hook besar di awal: pill "DID YOU KNOW?", kata muncul nyaris seketika, kata terakhir disorot ----------
-const HookBig: React.FC<{text: string; end: number; accent: string}> = ({text, end, accent}) => {
+// ---------- Hook besar di awal: pill "DID YOU KNOW?", kata muncul satu-satu, kata terakhir disorot ----------
+const HookBig: React.FC<{text: string; end: number; accent: string; pill?: string}> = ({text, end, accent, pill: pillText}) => {
   const frame = useCurrentFrame();
   const {fps} = useVideoConfig();
   const endF = Math.round(end * fps);
@@ -246,7 +250,7 @@ const HookBig: React.FC<{text: string; end: number; accent: string}> = ({text, e
           boxShadow: "0 10px 0 rgba(0,0,0,0.55)",
         }}
       >
-        DID YOU KNOW?
+        {pillText ?? "DID YOU KNOW?"}
       </div>
       <div
         style={{
@@ -421,6 +425,189 @@ const Captions: React.FC<{words: Word[]; accent: string}> = ({words, accent}) =>
   );
 };
 
+// ---------- Stickman: bereaksi kaget saat hook, bergaya santai, menunjuk ajakan follow, lompat senang ----------
+const dir = (deg: number): [number, number] => [Math.sin((deg * Math.PI) / 180), Math.cos((deg * Math.PI) / 180)];
+const limb = (x: number, y: number, a: number, b: number, l1 = 78, l2 = 72) => {
+  const [dx, dy] = dir(a);
+  const ex = x + dx * l1;
+  const ey = y + dy * l1;
+  const [fx, fy] = dir(b);
+  return `${x},${y} ${ex},${ey} ${ex + fx * l2},${ey + fy * l2}`;
+};
+
+const Line: React.FC<{pts: string}> = ({pts}) => (
+  <>
+    <polyline points={pts} fill="none" stroke="#000" strokeWidth={30} strokeLinecap="round" strokeLinejoin="round" />
+    <polyline points={pts} fill="none" stroke="#fff" strokeWidth={16} strokeLinecap="round" strokeLinejoin="round" />
+  </>
+);
+
+const Stickman: React.FC<{accent: string; hookEnd: number; ctaAt: number; durationSec: number}> = ({
+  accent,
+  hookEnd,
+  ctaAt,
+  durationSec,
+}) => {
+  const frame = useCurrentFrame();
+  const {fps} = useVideoConfig();
+  const t = frame / fps;
+  const shocked = t < hookEnd + 0.3;
+  const ending = t >= durationSec - 2.6;
+  const cta = (t >= ctaAt && t < ctaAt + 3.6) || ending;
+  const sw = Math.sin(t * 4);
+  const jump = cta ? -Math.abs(Math.sin(t * 7)) * 30 : 0;
+  const bob = shocked ? Math.sin(t * 22) * 4 : Math.sin(t * 5) * 5;
+  const enter = spring({frame, fps, config: {damping: 12, stiffness: 140}});
+  const gesture = !shocked && !cta && t % 4.5 > 3.3;
+
+  let aL: number, bL: number, aR: number, bR: number;
+  if (shocked) {
+    aL = -150 + sw * 12;
+    bL = -168 + sw * 10;
+    aR = 150 - sw * 12;
+    bR = 168 - sw * 10;
+  } else if (cta) {
+    aL = -98 + sw * 4;
+    bL = -98;
+    aR = 140 + Math.sin(t * 9) * 22;
+    bR = 160 + Math.sin(t * 9 + 1) * 22;
+  } else if (gesture) {
+    aL = -25 + sw * 10;
+    bL = -10 + sw * 15;
+    aR = 125;
+    bR = 165 + Math.sin(t * 10) * 20;
+  } else {
+    aL = -25 + sw * 14;
+    bL = -10 + sw * 20;
+    aR = 25 - sw * 14;
+    bR = 10 - sw * 20;
+  }
+  const legA = cta ? 24 : 9 + sw * 12;
+  const blink = t % 3.1 < 0.12;
+  const shoulder = 148;
+  const hip = 262;
+  const mouth = shocked ? (
+    <ellipse cx={150} cy={96} rx={10} ry={14 + Math.sin(t * 22) * 2} fill="#000" />
+  ) : cta ? (
+    <path d="M126 86 Q150 118 174 86 Z" fill="#000" />
+  ) : (
+    <path d="M134 90 Q150 102 166 90" fill="none" stroke="#000" strokeWidth={6} strokeLinecap="round" />
+  );
+  return (
+    <div
+      style={{
+        position: "absolute",
+        right: 30,
+        bottom: 24,
+        width: 330,
+        height: 462,
+        transform: `translateY(${interpolate(enter, [0, 1], [260, 0])}px)`,
+      }}
+    >
+      <svg viewBox="0 0 300 420" width="330" height="462">
+        <ellipse cx={150} cy={412} rx={70 + jump * 0.6} ry={9} fill="#000" opacity={0.35} />
+        <g transform={`translate(0 ${bob + jump})`}>
+          <Line pts={limb(150, hip, -legA, -legA * 0.3, 92, 86)} />
+          <Line pts={limb(150, hip, legA, legA * 0.3, 92, 86)} />
+          <Line pts={`150,118 150,${hip}`} />
+          <Line pts={limb(150, shoulder, aL, bL)} />
+          <Line pts={limb(150, shoulder, aR, bR)} />
+          <g transform={`rotate(${Math.sin(t * 3) * 4} 150 110)`}>
+            <circle cx={150} cy={70} r={46} fill="#fff" stroke="#000" strokeWidth={8} />
+            <path d="M106 56 Q150 24 194 56" fill="none" stroke={accent} strokeWidth={14} strokeLinecap="round" />
+            {shocked ? (
+              <>
+                <line x1={124} y1={46} x2={142} y2={52} stroke="#000" strokeWidth={5} strokeLinecap="round" />
+                <line x1={176} y1={46} x2={158} y2={52} stroke="#000" strokeWidth={5} strokeLinecap="round" />
+              </>
+            ) : null}
+            <ellipse cx={134} cy={70} rx={6} ry={blink ? 1.5 : shocked ? 9 : 7} fill="#000" />
+            <ellipse cx={166} cy={70} rx={6} ry={blink ? 1.5 : shocked ? 9 : 7} fill="#000" />
+            {mouth}
+          </g>
+          {shocked ? (
+            <text
+              x={232}
+              y={52 + Math.sin(t * 14) * 4}
+              fontFamily={fontFamily}
+              fontWeight={800}
+              fontSize={84}
+              fill={accent}
+              stroke="#000"
+              strokeWidth={10}
+              paintOrder="stroke"
+            >
+              !
+            </text>
+          ) : null}
+        </g>
+      </svg>
+    </div>
+  );
+};
+
+// ---------- Ajakan follow: muncul di tengah video dan lagi di akhir ----------
+const FollowCta: React.FC<{accent: string; ctaAt: number; durationSec: number; text: string}> = ({
+  accent,
+  ctaAt,
+  durationSec,
+  text,
+}) => {
+  const frame = useCurrentFrame();
+  const {fps} = useVideoConfig();
+  const t = frame / fps;
+  const win = [
+    [ctaAt, ctaAt + 3.6],
+    [durationSec - 2.6, durationSec],
+  ].find(([a, b]) => t >= a && t < b);
+  if (!win) return null;
+  const sp = spring({frame: Math.round((t - win[0]) * fps), fps, config: {damping: 11, stiffness: 200, mass: 0.6}});
+  const out = interpolate(t, [win[1] - 0.25, win[1]], [1, 0], clampBoth);
+  const pulse = 1 + Math.sin(t * 9) * 0.03;
+  return (
+    <div
+      style={{
+        position: "absolute",
+        left: 40,
+        bottom: 210,
+        opacity: out,
+        transform: `scale(${interpolate(sp, [0, 1], [0.3, 1]) * pulse}) rotate(-3deg)`,
+        transformOrigin: "left bottom",
+        fontFamily,
+        textAlign: "center",
+      }}
+    >
+      <div
+        style={{
+          fontWeight: 800,
+          fontSize: 84,
+          color: "#111",
+          background: accent,
+          padding: "10px 44px",
+          borderRadius: 36,
+          boxShadow: "0 10px 0 rgba(0,0,0,0.6)",
+          letterSpacing: 3,
+        }}
+      >
+        FOLLOW
+      </div>
+      <div
+        style={{
+          marginTop: 16,
+          fontWeight: 700,
+          fontSize: 34,
+          color: "#fff",
+          background: "rgba(0,0,0,0.72)",
+          padding: "8px 24px",
+          borderRadius: 24,
+        }}
+      >
+        {text}
+      </div>
+    </div>
+  );
+};
+
 const Badge: React.FC<{label: string; accent: string}> = ({label, accent}) => (
   <div style={{position: "absolute", top: 96, left: 0, right: 0, display: "flex", justifyContent: "center"}}>
     <div
@@ -457,7 +644,7 @@ const Progress: React.FC<{accent: string}> = ({accent}) => {
   );
 };
 
-export const FactVideo: React.FC<FactProps> = (p) => {
+export const FactVideo: React.FC<FactProps & {children?: React.ReactNode}> = (p) => {
   const hookEnd = Math.max(p.hookEnd, 1.8);
   const captionWords = p.words.slice(p.hookWordCount);
   return (
@@ -470,10 +657,22 @@ export const FactVideo: React.FC<FactProps> = (p) => {
         }}
       />
       {p.audio ? <Audio src={staticFile(p.audio)} /> : null}
+      {p.children}
       <Captions words={captionWords} accent={p.accent} />
+      {p.stickman !== false ? (
+        <>
+          <FollowCta
+            accent={p.accent}
+            ctaAt={p.ctaAt ?? 8}
+            durationSec={p.durationSec}
+            text={p.cta ?? "for 1 new fact every day"}
+          />
+          <Stickman accent={p.accent} hookEnd={hookEnd} ctaAt={p.ctaAt ?? 8} durationSec={p.durationSec} />
+        </>
+      ) : null}
       <HookTop text={p.hook} start={hookEnd - 0.1} accent={p.accent} />
       <Sequence from={0} durationInFrames={Math.round((hookEnd + 0.1) * FPS)} layout="none">
-        <HookBig text={p.hook} end={hookEnd} accent={p.accent} />
+        <HookBig text={p.hook} end={hookEnd} accent={p.accent} pill={p.pill} />
       </Sequence>
       <Badge label={p.label} accent={p.accent} />
       <Progress accent={p.accent} />
